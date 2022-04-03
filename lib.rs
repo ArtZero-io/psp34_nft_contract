@@ -11,6 +11,7 @@ pub mod psp34_nft {
     use brush::contracts::psp34::*;
     use brush::contracts::psp34::extensions::metadata::*;
     use brush::contracts::psp34::extensions::burnable::*;
+    use brush::contracts::psp34::extensions::enumerable::*;
     use brush::contracts::ownable::*;
     use brush::modifiers;
     use ink_storage::{
@@ -20,8 +21,9 @@ pub mod psp34_nft {
     };
     use ink_prelude::vec::Vec;
     use ink_storage::Mapping;
-
-    #[derive(Default, SpreadAllocate, PSP34Storage, PSP34MetadataStorage, OwnableStorage)]
+    use ink_prelude::string::ToString;
+    
+    #[derive(Default, SpreadAllocate, PSP34Storage, PSP34MetadataStorage, OwnableStorage, PSP34EnumerableStorage)]
     #[ink(storage)]
     pub struct Psp34Nft{
         #[PSP34StorageField]
@@ -32,7 +34,9 @@ pub mod psp34_nft {
         ownable: OwnableData,
         token_count: u64,
         attribute_count: u32,
-        attribute_names: Mapping<u32,Vec<u8>>
+        attribute_names: Mapping<u32,Vec<u8>>,
+        #[PSP34EnumerableStorageField]
+        enumdata: PSP34EnumerableData,
     }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
@@ -56,7 +60,8 @@ pub mod psp34_nft {
     impl PSP34Burnable for Psp34Nft {}
     impl PSP34Metadata for Psp34Nft {}
     impl PSP34Internal for Psp34Nft {}
-
+    impl PSP34Enumerable for Psp34Nft {}
+    
     #[brush::trait_definition]
     pub trait Psp34Traits {
         #[ink(message)]
@@ -70,7 +75,7 @@ pub mod psp34_nft {
         #[ink(message)]
         fn get_attribute_name(&self, index:u32) -> String;
         #[ink(message)]
-        fn token_uri(&self,token_id: u64) -> Vec<u8>;
+        fn token_uri(&self,token_id: u64) -> String;
 
     }
 
@@ -92,6 +97,12 @@ pub mod psp34_nft {
             self.token_count += 1;
             assert!(self._mint_to(caller, Id::U64(self.token_count)).is_ok());
             Ok(())
+        }
+
+        ///Get Token Count
+        #[ink(message)]
+        pub fn get_token_count(&self) -> u64 {
+            return self.token_count;
         }
 
         fn add_attribute_name(&mut self, attribute_input:Vec<u8>){
@@ -182,11 +193,10 @@ pub mod psp34_nft {
         fn token_uri(
             &self,
             token_id: u64
-        ) -> Vec<u8> {
-            let mut token_uri = self.get_attribute(Id::U8(0), String::from("baseURI").into_bytes()).unwrap();
-            token_uri.extend(&token_id.to_be_bytes());
-            token_uri.extend(String::from(".json").into_bytes());
-
+        ) -> String {
+            let value = self.get_attribute(Id::U8(0), String::from("baseURI").into_bytes());
+            let mut token_uri = String::from_utf8(value.unwrap()).unwrap();
+            token_uri = token_uri + &token_id.to_string() + &String::from(".json");
             return token_uri;
         }
 
