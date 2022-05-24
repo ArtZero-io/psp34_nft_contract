@@ -32,11 +32,13 @@ pub mod psp34_nft {
         metadata: PSP34MetadataData,
         #[OwnableStorageField]
         ownable: OwnableData,
-        token_count: u64,
+        last_token_id: u64,
         attribute_count: u32,
         attribute_names: Mapping<u32,Vec<u8>>,
         #[PSP34EnumerableStorageField]
         enumdata: PSP34EnumerableData,
+        locked_tokens: Mapping<Id, u8>,
+        locked_token_count: u64
     }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
@@ -56,6 +58,8 @@ pub mod psp34_nft {
     }
 
     impl Ownable for Psp34Nft {}
+    #[brush::wrapper]
+    pub type Psp34Ref = dyn PSP34 + PSP34Burnable + PSP34Metadata;
     impl PSP34 for Psp34Nft {}
     impl PSP34Burnable for Psp34Nft {}
     impl PSP34Metadata for Psp34Nft {}
@@ -76,7 +80,6 @@ pub mod psp34_nft {
         fn get_attribute_name(&self, index:u32) -> String;
         #[ink(message)]
         fn token_uri(&self,token_id: u64) -> String;
-
     }
 
     impl Psp34Nft {
@@ -89,13 +92,14 @@ pub mod psp34_nft {
                 instance._init_with_owner(contract_owner);
             })
         }
+
         ///Only Owner can mint new token
         #[ink(message)]
         #[modifiers(only_owner)]
         pub fn mint(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
-            self.token_count += 1;
-            assert!(self._mint_to(caller, Id::U64(self.token_count)).is_ok());
+            self.last_token_id += 1;
+            assert!(self._mint_to(caller, Id::U64(self.last_token_id)).is_ok());
             Ok(())
         }
 
@@ -104,9 +108,9 @@ pub mod psp34_nft {
         #[modifiers(only_owner)]
         pub fn mint_with_attributes(&mut self, attributes: Vec<String>, values: Vec<String>) -> Result<(), Error> {
             let caller = self.env().caller();
-            self.token_count += 1;
-            assert!(self._mint_to(caller, Id::U64(self.token_count)).is_ok());
-            if self.set_multiple_attributes(Id::U64(self.token_count), attributes, values).is_err() {
+            self.last_token_id += 1;
+            assert!(self._mint_to(caller, Id::U64(self.last_token_id)).is_ok());
+            if self.set_multiple_attributes(Id::U64(self.last_token_id), attributes, values).is_err() {
                 panic!(
                     "error set_multiple_attributes"
                 )
@@ -116,8 +120,8 @@ pub mod psp34_nft {
 
         ///Get Token Count
         #[ink(message)]
-        pub fn get_token_count(&self) -> u64 {
-            return self.token_count;
+        pub fn get_last_token_id(&self) -> u64 {
+            return self.last_token_id;
         }
 
         fn add_attribute_name(&mut self, attribute_input:Vec<u8>){
@@ -137,9 +141,36 @@ pub mod psp34_nft {
             }
         }
 
+        /// Lock nft - Only owner token
+        #[ink(message)]
+        pub fn lock(&mut self, token_id: Id) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let token_owner = self.owner_of(token_id.clone()).unwrap();
+            assert!(caller == token_owner);
+            self.locked_token_count += 1;
+            self.locked_tokens.insert(&token_id, &1);
+            Ok(())
+        }
+
+        /// Check token is locked or not
+        #[ink(message)]
+        pub fn is_locked_nft(&self, token_id: Id) -> bool {
+            if self.locked_tokens.get(&token_id).is_some() {
+                return true;
+            }
+            return false;
+        }
+
+        ///Get Locked Token Count
+        #[ink(message)]
+        pub fn get_locked_token_count(&self) -> u64 {
+            return self.locked_token_count;
+        }
+
     }
 
     impl Psp34Traits for Psp34Nft{
+
         /// Change baseURI
         #[ink(message)]
         #[modifiers(only_owner)]
@@ -153,6 +184,11 @@ pub mod psp34_nft {
         #[modifiers(only_owner)]
         fn set_multiple_attributes(&mut self, token_id:Id, attributes: Vec<String>, values: Vec<String>) -> Result<(),Error> {
             assert!(token_id != Id::U64(0));
+
+            if !self.is_locked_nft(token_id.clone()) {
+                return Err(Error::Custom(String::from("Token is locked")));
+            }
+
             if attributes.len() != values.len() {
                 return Err(Error::Custom(String::from("Inputs not same length")));
             }
