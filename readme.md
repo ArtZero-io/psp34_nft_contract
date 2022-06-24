@@ -1,8 +1,8 @@
 More information how to deploy contract at https://docs.alephzero.org
 
 If you want to try it quicker without contract deployment,
-1. Make sure you get free SAZERO from https://faucet-smartnet.test.azero.dev/
-2. Open https://smartnet.test.azero.dev/#/contracts
+1. Make sure you get free TZERO from https://faucet.test.azero.dev/
+2. Open https://test.azero.dev/#/contracts
 3. Click Upload & deploy contract
 4. Add the .contract file and deploy
 
